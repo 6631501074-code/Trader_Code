@@ -1,0 +1,40 @@
+# ============================================================
+# LLM Multi-Agent Trading System — Dependencies
+# ============================================================
+
+# --- Workflow & LLM ---
+langgraph>=0.2.0
+langchain>=0.2.0
+langchain-ollama>=0.1.0          # Gemma3 4b via Ollama local
+
+# --- MT5 Broker (XM) ---
+MetaTrader5>=5.0.45
+
+# --- Database (PostgreSQL) ---
+asyncpg>=0.29.0                  # Async PostgreSQL driver
+psycopg2-binary>=2.9.9           # Sync fallback (migrations)
+sqlalchemy[asyncio]>=2.0.0       # ORM + async support
+alembic>=1.13.0                  # DB migrations
+
+# --- Data & Validation ---
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+pandas>=2.0.0
+numpy>=1.26.0
+
+# --- JSON Repair ---
+json-repair>=0.30.0
+
+# --- Async & Utils ---
+aiohttp>=3.9.0
+python-dotenv>=1.0.0
+tenacity>=8.2.0                  # Retry logic
+
+# --- Logging & Observability ---
+structlog>=24.1.0
+rich>=13.7.0                     # Pretty console output
+
+# --- Testing ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.12.0
