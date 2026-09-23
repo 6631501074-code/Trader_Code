@@ -187,7 +187,7 @@ def get_pip_value_from_mt5(symbol: str) -> float:
         import MetaTrader5 as mt5
         info = mt5.symbol_info(symbol)
         if info is None:
-            raise RuntimeError(f"Symbol {symbol} not found in MT5")
+            raise RuntimeError(f"Symbol {symbol} not found or MT5 not connected")
 
         tick_size  = info.trade_tick_size   # เช่น 0.00001 สำหรับ EURUSD
         tick_value = info.trade_tick_value  # USD per tick per lot
@@ -204,7 +204,9 @@ def get_pip_value_from_mt5(symbol: str) -> float:
         logger.debug(f"[PipValue] {symbol}: tick_val={tick_value} tick_sz={tick_size} pip_val={pip_value:.4f}")
         return pip_value
 
-    except ImportError:
-        # Fallback สำหรับ test (ไม่มี MT5)
+    except Exception as exc:
+        # Fallback สำหรับ test และ dev mode (ไม่มี MT5 หรือ MT5 ยังไม่ connected)
+        logger.debug(f"[PipValue] Using fallback default for {symbol} ({exc})")
         defaults = {"EURUSD": 10.0, "GBPUSD": 10.0, "XAUUSD": 100.0, "USDJPY": 9.0}
         return defaults.get(symbol, 10.0)
+

@@ -29,6 +29,7 @@ from agents.risk_officer_agent import RiskOfficerAgent
 from agents.scenario_planner_agent import ScenarioPlannerAgent
 from agents.trading_strategy_agent import TradingStrategyAgent
 from config import get_settings
+from core.parallel_runner import ParallelDepartmentRunner
 from core.state import TradingState, ValidationStatus
 from data.market_data import MarketDataFetcher
 from logging_.audit_logger import AuditLogger
@@ -75,6 +76,7 @@ class WorkflowNodes:
         self._ceo        = ceo_agent
         self._audit      = audit_logger
         self._timeframe  = timeframe
+        self._runner     = ParallelDepartmentRunner(timeout_seconds=180.0)
 
     # ──────────────────────────────────────────────────────────────
     # NODE 1: build_context
@@ -129,45 +131,13 @@ class WorkflowNodes:
 
     async def run_departments(self, state: TradingState) -> dict:
         """
-        Step 2 — รัน 7 Department Agents พร้อมกันด้วย asyncio.gather()
+        Step 2 — รัน 7 Department Agents พร้อมกันผ่าน ParallelDepartmentRunner
         ทุก agent ที่ error → return HOLD report (ไม่ crash ทั้งระบบ)
         """
         start = time.monotonic() * 1000
         logger.info(f"[Step2] run_departments | trace={state.get('trace_id')}")
 
-        # รัน agents พร้อมกัน (parallel asyncio)
-        # Ollama ประมวลผลทีละ 1 request บน GPU เดียว → queue อัตโนมัติ
-        # timeout ต่อ agent = 180s (7 agents × ~25s/agent ≈ 175s total max)
-        AGENT_TIMEOUT = 180.0
-        tasks = [
-            asyncio.create_task(
-                asyncio.wait_for(agent.analyze(state), timeout=AGENT_TIMEOUT),
-                name=agent.agent_name,
-            )
-            for agent in DEPARTMENT_AGENTS
-        ]
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        department_reports = {}
-        errors = []
-
-        for agent, result in zip(DEPARTMENT_AGENTS, results):
-            if isinstance(result, Exception):
-                logger.error(f"[Step2] {agent.agent_name} failed: {result}")
-                errors.append(f"{agent.agent_name}: {result}")
-                department_reports[agent.agent_name] = {
-                    "agent_name": agent.agent_name,
-                    "status": "timeout" if isinstance(result, asyncio.TimeoutError) else "error",
-                    "recommendation": "HOLD",
-                    "confidence": 0.0,
-                    "reasoning": f"Agent failed: {result}",
-                    "key_points": [],
-                    "raw_llm_output": "",
-                    "latency_ms": 60000.0,
-                }
-            else:
-                department_reports[agent.agent_name] = result
+        department_reports, errors = await self._runner.run_all(DEPARTMENT_AGENTS, state)
 
         # Log ลง DB
         await self._audit.log_agent_reports({

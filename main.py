@@ -71,14 +71,16 @@ settings = get_settings()
 # Configuration
 # ──────────────────────────────────────────────────────────────
 
-WATCH_SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD"]  # ปรับตามต้องการ
+WATCH_SYMBOLS = ["GOLD", "EURUSD", "GBPUSD", "USDJPY"]  # XM ใช้ชื่อ 'GOLD' สำหรับทองคำ
 TIMEFRAME = "H1"
 
-# Key levels สำหรับ Price Zone Monitor (ปรับตาม analysis ของคุณ)
+# Key levels สำหรับ Price Zone Monitor
 KEY_LEVELS = {
-    "XAUUSD": [2300.0, 2320.0, 2350.0, 2380.0, 2400.0],
-    "EURUSD": [1.0700, 1.0750, 1.0800, 1.0850, 1.0900],
-    "GBPUSD": [1.2600, 1.2650, 1.2700, 1.2750, 1.2800],
+    "GOLD":   [4300.0, 4325.0, 4350.0, 4375.0, 4400.0],
+    "XAUUSD": [4300.0, 4325.0, 4350.0, 4375.0, 4400.0],
+    "EURUSD": [1.1350, 1.1400, 1.1450, 1.1500, 1.1550],
+    "GBPUSD": [1.3250, 1.3300, 1.3350, 1.3400, 1.3450],
+    "USDJPY": [156.00, 156.50, 157.00, 157.50, 158.00],
 }
 
 

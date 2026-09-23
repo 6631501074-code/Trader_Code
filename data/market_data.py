@@ -45,16 +45,21 @@ class MarketDataFetcher:
             return False
 
         try:
+            import os
             import MetaTrader5 as mt5
             from config import get_settings
             settings = get_settings()
 
-            if not mt5.initialize(
-                path=settings.mt5_path,
-                login=settings.mt5_login,
-                password=settings.mt5_password,
-                server=settings.mt5_server,
-            ):
+            init_kwargs = {}
+            if settings.mt5_path and os.path.exists(settings.mt5_path):
+                init_kwargs["path"] = settings.mt5_path
+
+            if settings.mt5_login and settings.mt5_login > 0 and settings.mt5_login != 12345678:
+                init_kwargs["login"] = settings.mt5_login
+                init_kwargs["password"] = settings.mt5_password
+                init_kwargs["server"] = settings.mt5_server
+
+            if not mt5.initialize(**init_kwargs):
                 error = mt5.last_error()
                 logger.warning(f"[MT5] Initialize failed: {error} — falling back to mock data")
                 self._initialized = False
@@ -90,6 +95,9 @@ class MarketDataFetcher:
                 "D1": mt5.TIMEFRAME_D1,
             }
             mt5_tf = tf_map.get(timeframe, mt5.TIMEFRAME_H1)
+
+            # เลือก Symbol ให้ active ใน Market Watch
+            mt5.symbol_select(symbol, True)
 
             # ดึง OHLCV (50 แท่งล่าสุด)
             rates = mt5.copy_rates_from_pos(symbol, mt5_tf, 0, 50)

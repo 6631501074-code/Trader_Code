@@ -157,7 +157,7 @@ class TestLotCalculator:
             action="BUY",
         )
         # lot_size ต้องเป็น multiple ของ 0.01
-        assert round(result.lot_size % 0.01, 6) == pytest.approx(0.0, abs=1e-6)
+        assert round(result.lot_size / self.calc.lot_step, 6).is_integer()
 
     def test_xauusd_pip_unit(self):
         """XAUUSD ใช้ pip unit 0.1 — SL/TP ต้องคำนวณถูก"""
@@ -363,7 +363,9 @@ class TestSafetyLayerIntegration:
 
         registry = IdempotencyRegistry(db_pool=None)
         layer = SafetyLayer(idempotency=registry)
-        state = self._make_state(staleness_seconds=60)  # ค้าง 60 วิ
+        from config import get_settings
+        threshold = get_settings().data_staleness_seconds
+        state = self._make_state(staleness_seconds=threshold + 30)
 
         result = asyncio.run(layer.validate(state))
         assert result["validation_result"]["status"] == "FAIL"
