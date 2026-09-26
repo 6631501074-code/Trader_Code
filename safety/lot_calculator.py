@@ -192,10 +192,10 @@ def get_pip_value_from_mt5(symbol: str) -> float:
         tick_size  = info.trade_tick_size   # เช่น 0.00001 สำหรับ EURUSD
         tick_value = info.trade_tick_value  # USD per tick per lot
 
-        # pip_size: standard = 0.0001, JPY = 0.01, XAUUSD = 0.1 (broker-dependent)
+        # pip_size: standard = 0.0001, JPY = 0.01, Gold (XAUUSD/GOLD) = 0.1 (broker-dependent)
         if "JPY" in symbol.upper():
             pip_size = 0.01
-        elif "XAU" in symbol.upper():
+        elif "XAU" in symbol.upper() or "GOLD" in symbol.upper():
             pip_size = 0.1
         else:
             pip_size = 0.0001
@@ -207,6 +207,6 @@ def get_pip_value_from_mt5(symbol: str) -> float:
     except Exception as exc:
         # Fallback สำหรับ test และ dev mode (ไม่มี MT5 หรือ MT5 ยังไม่ connected)
         logger.debug(f"[PipValue] Using fallback default for {symbol} ({exc})")
-        defaults = {"EURUSD": 10.0, "GBPUSD": 10.0, "XAUUSD": 100.0, "USDJPY": 9.0}
+        defaults = {"EURUSD": 10.0, "GBPUSD": 10.0, "XAUUSD": 10.0, "GOLD": 10.0, "USDJPY": 9.0}
         return defaults.get(symbol, 10.0)
 

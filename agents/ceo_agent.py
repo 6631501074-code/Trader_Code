@@ -30,9 +30,9 @@ You receive reports from 7 specialized department heads and make the FINAL tradi
 Your decision-making process:
 1. READ all department reports carefully
 2. Identify CONSENSUS vs DISSENT among departments
-3. Weight departments: Risk Officer VETO overrides all (HOLD if Risk says HOLD)
-4. Consider: Operations HOLD = execution impossible, override all
-5. Synthesize the majority view while addressing minority concerns
+3. Active VETO: Only if Risk Officer issues an explicit VETO (veto_reason or extreme risk) or Operations reports execution failure / poor data, you MUST HOLD. A routine cautious HOLD without an explicit veto_reason is simply counted by its weight (20% or 5%).
+4. Synthesize the majority view while addressing minority concerns
+5. If consensus is strong (>= 60%) and Trading Strategy has a clear BUY or SELL setup, you can decide BUY or SELL
 6. Set precise SL and TP levels based on the analysis (in PIPS, not dollars)
 7. Provide your confidence and reasoning
 
@@ -40,13 +40,14 @@ Department Weights (for consensus scoring):
 - TradingStrategy: 25% (primary technical signal)
 - MarketIntelligence: 20% (macro context)
 - ScenarioPlanner: 15% (big picture alignment)
-- RiskOfficer: 20% (VETO power if HOLD)
+- RiskOfficer: 20% (portfolio risk assessment; hard VETO only if veto_reason is present)
 - PositionManager: 10% (portfolio management)
 - LearningOfficer: 5% (historical bias)
-- Operations: 5% (VETO power if HOLD for execution issues)
+- Operations: 5% (execution readiness; hard VETO only if execution not ready or data degraded)
 
 CRITICAL:
-- If Risk Officer OR Operations recommends HOLD: YOUR decision MUST be HOLD
+- Active VETO overrides all: If Risk Officer provides an explicit veto_reason or risk_level is 'extreme', or Operations execution_ready is false, action MUST be HOLD.
+- Otherwise, weigh all department recommendations according to their weights.
 - NEVER calculate lot sizes, dollar amounts, or risk percentages
 - SL and TP must be in PIPS (positive numbers)
 - entry_price should be the current bid/ask (for BUY: current ask, SELL: current bid)
@@ -161,9 +162,12 @@ DEPARTMENT REPORTS:
 CEO TASK:
 1. Review all 7 department reports above
 2. Apply the department weights to compute consensus_score
-3. If Risk Officer OR Operations says HOLD → your action MUST be HOLD
-4. Provide sl_pips and tp_pips as positive pip distances (NOT prices)
-5. Set entry_price to current {'ask' if votes['BUY'] >= votes['SELL'] else 'bid'}: {snap.get('ask' if votes['BUY'] >= votes['SELL'] else 'bid')}
+3. Check for HARD VETO:
+   - If Risk Officer gives an explicit veto_reason (or risk_level is extreme), or Operations reports execution failure, action MUST be HOLD.
+   - A routine HOLD without a veto_reason is simply a vote weighted at 20% or 5%.
+4. If there is a clear consensus and setup (e.g. TradingStrategy BUY/SELL with good macro backing), you can approve BUY or SELL.
+5. Provide sl_pips and tp_pips as positive pip distances (NOT prices)
+6. Set entry_price to current {'ask' if votes['BUY'] >= votes['SELL'] else 'bid'}: {snap.get('ask' if votes['BUY'] >= votes['SELL'] else 'bid')}
 
 Respond with your final board decision JSON:"""
 
@@ -179,16 +183,21 @@ Respond with your final board decision JSON:"""
             if errors:
                 raise ValueError(f"Schema: {errors}")
 
-            # Check Risk/Operations VETO
+            # Check Risk/Operations Hard VETO
             reports = state.get("department_reports", {})
             risk_report = reports.get("RiskOfficer", {})
             ops_report = reports.get("Operations", {})
 
             veto_reason = None
-            if risk_report.get("recommendation") == "HOLD":
-                veto_reason = f"RiskOfficer VETO: {risk_report.get('reasoning', '')[:100]}"
-            elif ops_report.get("recommendation") == "HOLD":
-                veto_reason = f"Operations VETO: {ops_report.get('reasoning', '')[:100]}"
+            raw_risk_veto = risk_report.get("veto_reason")
+            if raw_risk_veto and str(raw_risk_veto).strip().lower() not in ("null", "none", "false", ""):
+                veto_reason = f"RiskOfficer VETO: {raw_risk_veto}"
+            elif risk_report.get("risk_level") == "extreme":
+                veto_reason = f"RiskOfficer VETO (Extreme Risk): {risk_report.get('reasoning', '')[:100]}"
+            elif ops_report.get("execution_ready") is False:
+                veto_reason = f"Operations VETO: Execution not ready ({ops_report.get('reasoning', '')[:100]})"
+            elif ops_report.get("data_quality") == "poor":
+                veto_reason = f"Operations VETO: Poor data quality ({ops_report.get('reasoning', '')[:100]})"
 
             action = "HOLD" if veto_reason else parsed["action"].upper()
             reasoning = veto_reason if veto_reason else parsed["reasoning"]

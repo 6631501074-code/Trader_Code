@@ -36,18 +36,23 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://trader_user:password@localhost:5432/trader_db"
 
     # --- Safety Limits ---
-    max_risk_pct: float = Field(default=0.02, ge=0.001, le=0.05)
+    max_risk_pct: float = Field(default=0.02, ge=0.001, le=0.20)  # สูงสุด 20% ต่อไม้
     min_lot: float = 0.01
     max_lot: float = 5.0
     data_staleness_seconds: int = 30
     json_repair_max_retries: int = 3
 
+    # --- Agent Settings ---
+    agent_timeout_seconds: float = 300.0   # timeout ต่อ agent (วินาที)
+
     # --- System ---
     log_level: str = "INFO"
     environment: str = "development"
+    execution_mode: str = "paper"          # "paper" หรือ "live"
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Singleton settings — ใช้ร่วมกันทั้งระบบ"""
     return Settings()
+

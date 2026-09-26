@@ -255,6 +255,25 @@ class WorkflowNodes:
             action = state["final_action"]
             symbol = state["symbol"]
 
+            # If running in Paper mode, simulate execution without risking real funds
+            if getattr(settings, "execution_mode", "paper").lower() == "paper":
+                logger.info(
+                    f"[Execute] [PAPER MODE] Simulating execution for {symbol} {action} "
+                    f"lot={params.get('lot_size')} SL={params.get('sl_price')} TP={params.get('tp_price')}"
+                )
+                return {
+                    "retcode": 10009,
+                    "retcode_name": "TRADE_RETCODE_DONE (paper)",
+                    "order": 99999,
+                    "deal": 88888,
+                    "volume": params.get("lot_size", 0.01),
+                    "price": state.get("ceo_decision", {}).get("entry_price", 0.0),
+                    "comment": "Paper trade simulated",
+                    "symbol": symbol,
+                    "action": action,
+                    "simulated": True,
+                }
+
             order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
 
             request = {

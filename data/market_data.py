@@ -167,18 +167,27 @@ class MarketDataFetcher:
             acc = mt5.account_info()
             if acc is None:
                 raise RuntimeError("Cannot get account info")
+
+            # ✅ FIX: ถ้า margin = 0 (ไม่มีไม้เปิดอยู่เลย) MT5 จะคืน margin_level = 0.0
+            # ซึ่งไม่ได้หมายความว่า "DANGER" แต่หมายถึง "ไม่มี margin ที่ใช้อยู่ = ปลอดภัยมาก"
+            # ตั้งค่าเป็น 9999.0 เพื่อให้ RiskOfficer รู้ว่า "Excellent - no open risk"
+            margin_level = acc.margin_level
+            if acc.margin == 0 or margin_level == 0.0:
+                margin_level = 9999.0  # No open positions = maximum safety
+
             return {
                 "balance": acc.balance,
                 "equity": acc.equity,
                 "margin": acc.margin,
                 "margin_free": acc.margin_free,
-                "margin_level": acc.margin_level,
+                "margin_level": margin_level,
                 "profit": acc.profit,
                 "currency": acc.currency,
                 "leverage": acc.leverage,
             }
         except Exception as exc:
             raise RuntimeError(f"Account info failed: {exc}") from exc
+
 
     def get_open_positions(self, symbol: Optional[str] = None) -> list[dict]:
         """ดึง open positions จาก MT5"""

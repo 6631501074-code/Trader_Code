@@ -296,13 +296,15 @@ class SafetyLayer:
         symbol = state.get("symbol", "")
 
         balance = float(account.get("balance", 0))
-        if balance <= 0:
-            raise ValueError(f"Invalid account balance: {balance}")
+        equity = float(account.get("equity", 0))
+        effective_balance = max(balance, equity) if equity > 0 else balance
+        if effective_balance <= 0:
+            raise ValueError(f"Invalid account balance/equity: balance={balance}, equity={equity}")
 
         pip_value = get_pip_value_from_mt5(symbol)
 
         result = self._lot_calc.calculate(
-            account_balance=balance,
+            account_balance=effective_balance,
             risk_pct=settings.max_risk_pct,
             sl_pips=float(ceo["sl_pips"]),
             pip_value_per_lot=pip_value,

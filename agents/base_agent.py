@@ -157,16 +157,25 @@ class BaseAgent(ABC):
             if errors:
                 raise ValueError(f"Schema validation failed: {errors}")
 
-            return DepartmentReport(
-                agent_name=self.agent_name,
-                status="ok",
-                recommendation=parsed["recommendation"].upper(),
-                confidence=max(0.0, min(1.0, float(parsed["confidence"]))),
-                reasoning=str(parsed["reasoning"]),
-                key_points=list(parsed.get("key_points", [])),
-                raw_llm_output=raw,
-                latency_ms=0.0,  # filled by analyze()
-            )
+            report: DepartmentReport = {
+                "agent_name": self.agent_name,
+                "status": "ok",
+                "recommendation": parsed["recommendation"].upper(),
+                "confidence": max(0.0, min(1.0, float(parsed["confidence"]))),
+                "reasoning": str(parsed["reasoning"]),
+                "key_points": list(parsed.get("key_points", [])),
+                "raw_llm_output": raw,
+                "latency_ms": 0.0,  # filled by analyze()
+            }
+            if "veto_reason" in parsed:
+                report["veto_reason"] = parsed.get("veto_reason")
+            if "risk_level" in parsed:
+                report["risk_level"] = parsed.get("risk_level")
+            if "execution_ready" in parsed:
+                report["execution_ready"] = parsed.get("execution_ready")
+            if "data_quality" in parsed:
+                report["data_quality"] = parsed.get("data_quality")
+            return report
 
         except ValueError as e:
             logger.warning(f"[{self.agent_name}] JSON parse failed, defaulting HOLD: {e}")

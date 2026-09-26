@@ -37,7 +37,11 @@ Your role:
 Critical rules:
 - NEVER calculate lot sizes, pip values, or dollar amounts
 - Express risk only as: low/medium/high/extreme or 1-5 scale
-- Your HOLD recommendation carries a VETO on the trade
+- Only set veto_reason (non-null) if there is a GENUINE hard reason to block the trade
+  (e.g. margin_level < 100%, extreme volatility spike, news blackout period)
+- If market conditions are normal but you prefer caution, use recommendation: "HOLD" with veto_reason: null
+- A "HOLD" with veto_reason: null is just your vote — NOT a hard block on the trade
+- Only recommendation: "HOLD" WITH veto_reason: "..." is a hard VETO that overrides CEO
 
 Respond ONLY with valid JSON:
 {
@@ -46,7 +50,7 @@ Respond ONLY with valid JSON:
   "reasoning": "risk assessment reasoning",
   "key_points": ["portfolio exposure level", "volatility assessment", "tail risk note"],
   "risk_level": "low" | "medium" | "high" | "extreme",
-  "veto_reason": null | "reason if vetoing"
+  "veto_reason": null
 }"""
 
     def build_prompt(self, state: TradingState) -> str:
@@ -71,11 +75,12 @@ ACCOUNT STATUS:
 
 MARGIN LEVEL INTERPRETATION (IMPORTANT):
   - Margin Level = (Equity / Margin Used) × 100%
+  - 9999% = NO OPEN POSITIONS (safest possible state — no margin risk at all)
   - >500% = Excellent (very safe, plenty of room)
   - 200-500% = Good (healthy account)
   - 100-200% = Caution (getting tight)
   - <100%    = DANGER (margin call zone — must HOLD)
-  Current: {margin_level:.1f}% → {"EXCELLENT - safe to trade" if margin_level > 500 else "GOOD" if margin_level > 200 else "CAUTION" if margin_level > 100 else "DANGER - DO NOT TRADE"}
+  Current: {margin_level:.1f}% → {"NO OPEN POSITIONS - safest state" if margin_level >= 9999 else "EXCELLENT - safe to trade" if margin_level > 500 else "GOOD" if margin_level > 200 else "CAUTION" if margin_level > 100 else "DANGER - DO NOT TRADE"}
 
 MARKET CONDITIONS:
 {snap}
@@ -93,8 +98,9 @@ Assess:
 5. Should this trade be vetoed? (HOLD) If so, why?
 
 RULES:
-- If margin_level < 200%, recommend HOLD (margin too tight)
-- If margin_level >= 200%, margin is NOT a reason to HOLD
-- If more than 3 open positions on same symbol, recommend HOLD
+- If margin_level < 200% (and not no positions), recommend HOLD with veto_reason explaining margin too tight
+- If margin_level >= 200% or 9999% (no open positions), margin is completely safe. DO NOT veto based on margin. Set veto_reason: null.
+- If there are no severe hazards (account healthy, volatility normal), set veto_reason: null. You can recommend BUY or SELL if risk profile permits taking a trade, or recommend HOLD with veto_reason: null if you prefer waiting for a better risk/reward setup.
+- Only provide a non-null veto_reason if there is a severe hazard that must actively block execution.
 
 {self._json_response_format()}"""

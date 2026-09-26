@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="th" x-data="dashboard()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🤖 AI Trading Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    .pulse-dot { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .glow-buy  { box-shadow: 0 0 20px rgba(34,197,94,0.3); }
+    .glow-sell { box-shadow: 0 0 20px rgba(239,68,68,0.3); }
+    .glow-hold { box-shadow: 0 0 20px rgba(234,179,8,0.2); }
+    .progress-bar { transition: width 0.5s ease; }
+    .slide-in { animation: slideIn 0.4s ease; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+    .log-entry { border-left: 3px solid #475569; padding-left: 8px; margin: 4px 0; }
+    .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:9999px; font-size:0.75rem; font-weight:600; }
+    .timer-ring { transition: stroke-dashoffset 1s linear; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ============================================================ -->
+<!-- TOP NAV BAR -->
+<!-- ============================================================ -->
+<nav class="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+  <div class="flex items-center gap-3">
+    <span class="text-2xl">🤖</span>
+    <h1 class="text-lg font-bold text-white">AI Trading Dashboard</h1>
+    <span class="badge text-xs" :class="wsConnected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'">
+      <span class="pulse-dot w-1.5 h-1.5 rounded-full mr-1.5" :class="wsConnected ? 'bg-green-400' : 'bg-red-400'"></span>
+      <span x-text="wsConnected ? 'LIVE' : 'OFFLINE'"></span>
+    </span>
+    <span x-show="mode" class="badge" :class="mode.toLowerCase() === 'live' ? 'bg-red-950 text-red-300 border border-red-500 font-bold animate-pulse' : 'bg-amber-900 text-amber-300'" x-text="'MODE: ' + mode.toUpperCase()"></span>
+  </div>
+  <div class="flex items-center gap-3 text-sm text-slate-400">
+    <span x-text="currentTime"></span>
+    <span>UTC</span>
+  </div>
+</nav>
+
+<!-- ============================================================ -->
+<!-- MAIN GRID -->
+<!-- ============================================================ -->
+<div class="max-w-screen-2xl mx-auto px-4 py-4 grid grid-cols-12 gap-4">
+
+  <!-- ============================================================ -->
+  <!-- LEFT: Price Ticker + Signal Cards -->
+  <!-- ============================================================ -->
+  <div class="col-span-12 lg:col-span-4 space-y-4">
+
+    <!-- PRICE TICKER -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-3">💹 Live Prices</h2>
+      <div class="space-y-2">
+        <template x-for="(pdata, sym) in prices" :key="sym">
+          <div class="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+            <span class="font-semibold text-white" x-text="sym"></span>
+            <div class="text-right">
+              <div class="text-lg font-mono font-bold" :class="getActionColor(results[sym]?.action)" x-text="pdata.bid ? pdata.bid.toFixed(2) : '---'"></div>
+              <div class="text-xs text-slate-500">
+                Spread: <span x-text="pdata.spread ? pdata.spread.toFixed(1) : '-'"></span>
+                | <span x-text="pdata.session || '-'"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="Object.keys(prices).length === 0" class="text-slate-500 text-sm text-center py-4">
+          Connecting to MT5...
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN SIGNAL CARD (GOLD) -->
+    <div class="card p-5" :class="getGlowClass(results['GOLD']?.action)">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <h2 class="text-xs text-slate-400 uppercase tracking-widest">GOLD — Latest Signal</h2>
+          <div class="text-5xl font-black mt-1" :class="getActionColor(results['GOLD']?.action)" x-text="results['GOLD']?.action || 'WAITING'"></div>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-slate-400">Confidence</div>
+          <div class="text-2xl font-bold text-white" x-text="results['GOLD']?.confidence ? (results['GOLD'].confidence * 100).toFixed(0) + '%' : '-'"></div>
+          <div class="text-xs text-slate-400 mt-1">Consensus</div>
+          <div class="text-lg font-semibold text-slate-300" x-text="results['GOLD']?.consensus ? (results['GOLD'].consensus * 100).toFixed(0) + '%' : '-'"></div>
+        </div>
+      </div>
+
+      <!-- Trade Params (แสดงเฉพาะ BUY/SELL) -->
+      <template x-if="results['GOLD']?.trade">
+        <div class="bg-slate-900 rounded-lg p-3 mt-3 space-y-2">
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div class="text-xs text-slate-400">Entry</div>
+              <div class="font-mono font-bold text-white" x-text="results['GOLD'].trade.entry_price?.toFixed(2) || '-'"></div>
+            </div>
+            <div>
+              <div class="text-xs text-red-400">SL</div>
+              <div class="font-mono font-bold text-red-400" x-text="results['GOLD'].trade.sl_price?.toFixed(2) || '-'"></div>
+            </div>
+            <div>
+              <div class="text-xs text-green-400">TP</div>
+              <div class="font-mono font-bold text-green-400" x-text="results['GOLD'].trade.tp_price?.toFixed(2) || '-'"></div>
+            </div>
+          </div>
+          <div class="flex justify-between text-xs text-slate-400 pt-2 border-t border-slate-700">
+            <span>Lot: <b class="text-white" x-text="results['GOLD'].trade.lot_size?.toFixed(2)"></b></span>
+            <span>Risk: <b class="text-amber-400" x-text="results['GOLD'].trade.risk_pct?.toFixed(1) + '%'"></b></span>
+            <span>$<b class="text-white" x-text="results['GOLD'].trade.risk_amount?.toFixed(2)"></b></span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Reasoning -->
+      <div x-show="results['GOLD']?.reasoning" class="mt-3 text-xs text-slate-400 leading-relaxed" x-text="results['GOLD']?.reasoning?.substring(0, 300) + '...'"></div>
+      <div class="mt-2 text-xs text-slate-600" x-text="results['GOLD']?.timestamp ? 'Updated: ' + new Date(results['GOLD'].timestamp).toLocaleTimeString() : ''"></div>
+    </div>
+
+    <!-- SCAN CONTROL -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-3">⏱️ Auto-Scan (M15)</h2>
+      <div class="grid grid-cols-2 gap-2">
+        <template x-for="sym in symbols" :key="sym">
+          <button @click="forceScan(sym)"
+            class="bg-slate-700 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-3 rounded-lg transition-all disabled:opacity-50"
+            :disabled="scanning"
+            x-text="'🔍 ' + sym">
+          </button>
+        </template>
+      </div>
+      <div x-show="scanning" class="mt-3 flex items-center gap-2 text-amber-400 text-sm">
+        <span class="pulse-dot w-2 h-2 bg-amber-400 rounded-full"></span>
+        Analyzing... (1-2 min)
+      </div>
+      <div class="mt-2 text-xs text-slate-500" x-text="'Next auto-scan: ' + nextScanIn"></div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- CENTER: AI Board Meeting + Live Log -->
+  <!-- ============================================================ -->
+  <div class="col-span-12 lg:col-span-5 space-y-4">
+
+    <!-- AI BOARD MEETING -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-4">🤖 AI Board Meeting — GOLD</h2>
+      
+      <!-- Agent cards -->
+      <div class="space-y-2" x-show="Object.keys(results['GOLD']?.departments || {}).length > 0">
+        <template x-for="(rep, name) in (results['GOLD']?.departments || {})" :key="name">
+          <div class="bg-slate-900 rounded-lg p-3 slide-in">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span x-text="getAgentEmoji(name)" class="text-lg"></span>
+                <span class="text-sm font-semibold text-slate-200" x-text="name"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="badge text-xs" :class="getBadgeClass(rep.recommendation)" x-text="rep.recommendation"></span>
+                <span class="text-xs text-slate-400" x-text="(rep.confidence * 100).toFixed(0) + '%'"></span>
+              </div>
+            </div>
+            <div class="mt-1.5 text-xs text-slate-400 leading-relaxed" x-text="rep.reasoning?.substring(0, 150)"></div>
+            <div class="mt-1 flex flex-wrap gap-1">
+              <template x-for="point in rep.key_points?.slice(0,2)" :key="point">
+                <span class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded" x-text="'• ' + point"></span>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Waiting state -->
+      <div x-show="Object.keys(results['GOLD']?.departments || {}).length === 0" class="text-center py-8 text-slate-500">
+        <div class="text-4xl mb-2">🤝</div>
+        <div class="text-sm">Click "🔍 GOLD" to start analysis</div>
+        <div class="text-xs mt-1 text-slate-600">or wait for auto-scan every 15 min</div>
+      </div>
+    </div>
+
+    <!-- LIVE LOG -->
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs text-slate-400 uppercase tracking-widest">📋 System Log</h2>
+        <button @click="logs = []" class="text-xs text-slate-500 hover:text-slate-300">Clear</button>
+      </div>
+      <div class="space-y-1 max-h-48 overflow-y-auto font-mono text-xs" id="logContainer">
+        <template x-for="(entry, i) in logs.slice(-30).reverse()" :key="i">
+          <div class="log-entry" :class="entry.level === 'error' ? 'border-red-500 text-red-400' : entry.level === 'warn' ? 'border-amber-500 text-amber-400' : 'text-slate-400'">
+            <span class="text-slate-600 mr-1" x-text="entry.time"></span>
+            <span x-text="entry.msg"></span>
+          </div>
+        </template>
+        <div x-show="logs.length === 0" class="text-slate-600 text-center py-2">Waiting for events...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- RIGHT: News + Other Symbols -->
+  <!-- ============================================================ -->
+  <div class="col-span-12 lg:col-span-3 space-y-4">
+
+    <!-- ECONOMIC CALENDAR -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-3">📰 Economic Calendar</h2>
+      <div class="space-y-2 max-h-96 overflow-y-auto">
+        <template x-for="(ev, i) in news" :key="i">
+          <div class="border-l-2 pl-2 py-1" :class="getImpactBorder(ev.impact)">
+            <div class="flex items-start justify-between gap-1">
+              <div class="text-xs font-semibold text-slate-200" x-text="ev.title"></div>
+              <span class="text-xs shrink-0 font-bold" :class="ev.currency === 'USD' ? 'text-blue-400' : 'text-slate-400'" x-text="ev.currency"></span>
+            </div>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="text-xs" :class="ev.is_past ? 'text-slate-600' : 'text-amber-400'" x-text="formatCountdown(ev)"></span>
+              <span x-show="ev.actual" class="text-xs text-green-400" x-text="'A: ' + ev.actual"></span>
+              <span x-show="ev.forecast && !ev.actual" class="text-xs text-slate-400" x-text="'F: ' + ev.forecast"></span>
+            </div>
+          </div>
+        </template>
+        <div x-show="news.length === 0" class="text-slate-500 text-sm text-center py-4">Loading calendar...</div>
+      </div>
+    </div>
+
+    <!-- OTHER SYMBOLS MINI SIGNALS -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-3">📊 Other Symbols</h2>
+      <div class="space-y-2">
+        <template x-for="sym in symbols.filter(s => s !== 'GOLD')" :key="sym">
+          <div class="flex items-center justify-between py-1.5 border-b border-slate-700 last:border-0">
+            <span class="text-sm font-semibold text-white" x-text="sym"></span>
+            <div class="text-right">
+              <span class="badge text-xs" :class="getBadgeClass(results[sym]?.action)" x-text="results[sym]?.action || '---'"></span>
+              <div class="text-xs text-slate-500 mt-0.5" x-text="results[sym]?.confidence ? (results[sym].confidence * 100).toFixed(0) + '%' : ''"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- PAPER TRADING STATS -->
+    <div class="card p-4">
+      <h2 class="text-xs text-slate-400 uppercase tracking-widest mb-3">📈 Paper Trading</h2>
+      <div class="space-y-2">
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-400">Mode</span>
+          <span class="text-amber-400 font-semibold" x-text="mode ? mode.toUpperCase() : 'PAPER'"></span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-400">WS Clients</span>
+          <span class="text-white font-semibold" x-text="wsConnected ? '1' : '0'"></span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-400">Scans done</span>
+          <span class="text-white font-semibold" x-text="scanCount"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- SCRIPT: Alpine.js Dashboard Logic -->
+<!-- ============================================================ -->
+<script>
+function dashboard() {
+  return {
+    // State
+    wsConnected: false,
+    scanning: false,
+    mode: '',
+    symbols: ['GOLD', 'EURUSD', 'GBPUSD', 'USDJPY'],
+    prices: {},
+    results: {},
+    news: [],
+    logs: [],
+    scanCount: 0,
+    currentTime: '',
+    nextScanIn: 'calculating...',
+
+    // WebSocket
+    ws: null,
+    reconnectTimer: null,
+    _nextScanSeconds: 0,
+
+    init() {
+      this.updateTime();
+      setInterval(() => this.updateTime(), 1000);
+      this.connectWS();
+      this.fetchNews();
+      setInterval(() => this.fetchNews(), 300000);
+      this.startScanCountdown();
+    },
+
+    connectWS() {
+      try {
+        this.ws = new WebSocket(`ws://${location.host}/ws`);
+
+        this.ws.onopen = () => {
+          this.wsConnected = true;
+          this.addLog('Connected to AI Server', 'info');
+        };
+
+        this.ws.onclose = () => {
+          this.wsConnected = false;
+          this.addLog('Connection lost — reconnecting in 3s...', 'warn');
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(() => this.connectWS(), 3000);
+        };
+
+        this.ws.onerror = () => {
+          this.addLog('WebSocket error', 'error');
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            this.handleMessage(msg);
+          } catch(e) {}
+        };
+      } catch(e) {
+        this.addLog('Cannot connect: ' + e.message, 'error');
+      }
+    },
+
+    handleMessage(msg) {
+      const { type, data } = msg;
+
+      if (type === 'init') {
+        this.symbols = data.symbols || this.symbols;
+        this.mode = data.execution_mode || '';
+        this.results = data.latest_results || {};
+        this.prices = data.prices || {};
+        this.addLog('Dashboard initialized', 'info');
+      }
+      else if (type === 'prices') {
+        this.prices = data;
+      }
+      else if (type === 'news') {
+        this.news = data.events || [];
+      }
+      else if (type === 'scan_started') {
+        this.scanning = true;
+        this.addLog(`Auto-scan #${data.scan_num} started`, 'info');
+      }
+      else if (type === 'scan_completed') {
+        this.scanning = false;
+        this.scanCount++;
+        this.addLog(`Scan #${data.scan_num} completed`, 'info');
+        this.resetScanCountdown();
+      }
+      else if (type === 'force_scan_started') {
+        this.scanning = true;
+        this.addLog(`Force scan: ${data.symbol}`, 'info');
+      }
+      else if (type === 'symbol_scan_start') {
+        this.addLog(`Analyzing ${data.symbol}...`, 'info');
+      }
+      else if (type === 'symbol_result') {
+        this.results[data.symbol] = data;
+        this.scanning = false;
+        const action = data.action;
+        const conf = data.confidence ? (data.confidence * 100).toFixed(0) : '';
+        this.addLog(`${data.symbol}: ${action} ${conf}% (${data.validation_status || ''})`, 
+          action === 'BUY' || action === 'SELL' ? 'info' : 'warn');
+      }
+    },
+
+    async forceScan(symbol) {
+      if (this.scanning) return;
+      this.scanning = true;
+      this.addLog(`Force scan requested: ${symbol}`, 'info');
+      try {
+        const resp = await fetch(`/api/scan/${symbol}`, { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) {
+          this.addLog(`Error: ${data.error}`, 'error');
+        }
+      } catch(e) {
+        this.addLog(`Scan failed: ${e.message}`, 'error');
+      } finally {
+        this.scanning = false;
+      }
+    },
+
+    async fetchNews() {
+      try {
+        const resp = await fetch('/api/news');
+        const data = await resp.json();
+        this.news = data.events || [];
+      } catch(e) {}
+    },
+
+    // ─── Helpers ─────────────────────────────────────────────
+    addLog(msg, level = 'info') {
+      const time = new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      this.logs.push({ time, msg, level });
+      if (this.logs.length > 100) this.logs.shift();
+    },
+
+    updateTime() {
+      const now = new Date();
+      this.currentTime = now.toLocaleTimeString('en-GB', {
+        timeZone: 'UTC',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    },
+
+    startScanCountdown() {
+      // คำนวณว่า M15 ครั้งถัดไปอีกกี่วินาที
+      const now = new Date();
+      const mins = now.getUTCMinutes();
+      const nextMark = Math.ceil((mins + 1) / 15) * 15;
+      const minsUntil = nextMark - mins;
+      this._nextScanSeconds = minsUntil * 60 - now.getUTCSeconds();
+      setInterval(() => {
+        this._nextScanSeconds = Math.max(0, this._nextScanSeconds - 1);
+        const m = Math.floor(this._nextScanSeconds / 60);
+        const s = this._nextScanSeconds % 60;
+        this.nextScanIn = `${m}m ${s.toString().padStart(2,'0')}s`;
+      }, 1000);
+    },
+
+    resetScanCountdown() {
+      this._nextScanSeconds = 15 * 60;
+    },
+
+    getActionColor(action) {
+      if (action === 'BUY')  return 'text-green-400';
+      if (action === 'SELL') return 'text-red-400';
+      return 'text-yellow-400';
+    },
+
+    getGlowClass(action) {
+      if (action === 'BUY')  return 'glow-buy';
+      if (action === 'SELL') return 'glow-sell';
+      return 'glow-hold';
+    },
+
+    getBadgeClass(action) {
+      if (action === 'BUY')  return 'bg-green-900 text-green-300';
+      if (action === 'SELL') return 'bg-red-900 text-red-300';
+      if (action === 'HOLD') return 'bg-yellow-900 text-yellow-300';
+      return 'bg-slate-700 text-slate-400';
+    },
+
+    getImpactBorder(impact) {
+      if (impact === 'high')   return 'border-red-500';
+      if (impact === 'medium') return 'border-amber-500';
+      return 'border-slate-600';
+    },
+
+    getAgentEmoji(name) {
+      const map = {
+        TradingStrategy:    '📈',
+        MarketIntelligence: '📰',
+        ScenarioPlanner:    '🎲',
+        RiskOfficer:        '🛡️',
+        PositionManager:    '💼',
+        LearningOfficer:    '🧠',
+        OperationsAgent:    '⚙️',
+      };
+      return map[name] || '🤖';
+    },
+
+    formatCountdown(ev) {
+      if (ev.is_past) return 'Past';
+      if (ev.seconds_until === null) return 'All day';
+      const s = ev.seconds_until;
+      if (s > 86400) return `${Math.floor(s/86400)}d`;
+      if (s > 3600)  return `in ${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+      if (s > 60)    return `in ${Math.floor(s/60)}m`;
+      return `in ${s}s ⚡`;
+    },
+  };
+}
+</script>
+</body>
+</html>

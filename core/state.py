@@ -59,7 +59,7 @@ class MarketSnapshot(TypedDict):
     fetched_at: str         # ISO-8601 เวลาที่ดึงข้อมูล (ใช้ตรวจ staleness)
 
 
-class DepartmentReport(TypedDict):
+class DepartmentReport(TypedDict, total=False):
     """ผลรายงานของแต่ละ Department Agent"""
     agent_name: str
     status: str             # "ok" | "error" | "timeout"
@@ -69,6 +69,10 @@ class DepartmentReport(TypedDict):
     key_points: list[str]
     raw_llm_output: str
     latency_ms: float
+    veto_reason: Optional[str]
+    risk_level: Optional[str]
+    execution_ready: Optional[bool]
+    data_quality: Optional[str]
 
 
 class CEODecision(TypedDict):
